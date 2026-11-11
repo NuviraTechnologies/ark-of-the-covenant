@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<!--
+  Ark of the Covenant — NEAR testnet deploy console
+  ======================================================================
+  Purpose: in-browser console for the Ark hackathon testnet deploy
+  (see ../DEPLOY-RUNBOOK.md). No public in-browser deployer accepts a
+  raw .wasm upload, so this page does it directly: it deploys a chosen
+  .wasm file to the connected account, sends change calls, and runs
+  view calls against the testnet RPC.
+
+  The network is pinned to TESTNET in code (see NETWORK_ID in the
+  module script). There is no mainnet code path anywhere in this file:
+  before every signing request the page checks the wallet selector's
+  configured network id and refuses to sign if it is not "testnet".
+
+  Keys are never handled by this page — no key material is read,
+  generated, stored, or displayed here. Signing happens entirely
+  inside the connected wallet (Meteor Wallet, testnet mode).
+
+  Libraries (pinned versions, loaded from the jsDelivr CDN at runtime;
+  no build step):
+    - near-api-js 5.0.0 — UMD browser bundle (window.nearApi); used
+      for the JSON-RPC provider (view calls), NEAR amount parsing,
+      and action builders.
+    - @near-wallet-selector/core 9.5.4 + @near-wallet-selector/meteor-wallet
+      9.5.4 — ES modules via jsDelivr's bundled +esm builds, wired up
+      through the import map below.
+
+  Created 2026-11-11.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ark of the Covenant — NEAR Testnet Console</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem auto; max-width: 860px; padding: 0 1rem; color: #1a1a1a; }
+  #banner { background: #0b5394; color: #fff; padding: 0.6rem 0.9rem; border-radius: 6px; font-weight: 600; margin-bottom: 1rem; word-break: break-all; }
+  section { border: 1px solid #ccc; border-radius: 6px; padding: 0.9rem 1rem; margin-bottom: 1rem; }
+  section h2 { margin: 0 0 0.6rem 0; font-size: 1.05rem; }
+  label { display: block; margin: 0.5rem 0 0.2rem 0; font-size: 0.9rem; font-weight: 600; }
+  input[type="text"], textarea { width: 100%; box-sizing: border-box; padding: 0.4rem; font-family: ui-monospace, monospace; font-size: 0.9rem; }
+  textarea { min-height: 4.5rem; }
+  button { margin-top: 0.7rem; padding: 0.45rem 1rem; font-size: 0.95rem; cursor: pointer; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .result { margin-top: 0.6rem; font-family: ui-monospace, monospace; font-size: 0.88rem; white-space: pre-wrap; word-break: break-all; }
+  .result a { color: #0b5394; }
+  #accountDisplay { font-family: ui-monospace, monospace; margin-top: 0.5rem; }
+  #log { background: #111; color: #d6d6d6; padding: 0.8rem; border-radius: 6px; height: 260px; overflow-y: auto; font-size: 0.82rem; white-space: pre-wrap; word-break: break-all; }
+  .hint { font-size: 0.85rem; color: #555; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/near-api-js@5.0.0/lib/browser-index.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "@near-wallet-selector/core": "https://cdn.jsdelivr.net/npm/@near-wallet-selector/core@9.5.4/+esm",
+    "@near-wallet-selector/meteor-wallet": "https://cdn.jsdelivr.net/npm/@near-wallet-selector/meteor-wallet@9.5.4/+esm"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="banner">Network: testnet · RPC: https://rpc.testnet.fastnear.com · Explorer: https://testnet.nearblocks.io</div>
+
+<h1>Ark of the Covenant — Testnet Deploy Console</h1>
+<p class="hint">Deploys a precompiled .wasm contract to the connected testnet account, then sends change calls and view calls. Signing happens inside the wallet; this page never sees a key.</p>
+
+<section id="walletSection">
+  <h2>1. Wallet</h2>
+  <button id="connectBtn" type="button">Connect wallet (Meteor)</button>
+  <button id="signOutBtn" type="button" disabled>Disconnect</button>
+  <div id="accountDisplay">Not connected.</div>
+</section>
+
+<section id="deploySection">
+  <h2>2. Deploy contract (.wasm)</h2>
+  <p class="hint">The contract is deployed to the connected account itself. For the Ark deploy, connect as the vault account first.</p>
+  <label for="wasmFile">Contract file (.wasm)</label>
+  <input type="file" id="wasmFile" accept=".wasm,application/wasm">
+  <br>
+  <button id="deployBtn" type="button" disabled>Deploy to connected account</button>
+  <div class="result" id="deployResult"></div>
+</section>
+
+<section id="callSection">
+  <h2>3. Change call (signed)</h2>
+  <label for="callContract">Contract account id</label>
+  <input type="text" id="callContract" value="arkvault2120.testnet">
+  <label for="callMethod">Method name</label>
+  <input type="text" id="callMethod" placeholder="new">
+  <label for="callArgs">Arguments (JSON object)</label>
+  <textarea id="callArgs" placeholder="{}">{}</textarea>
+  <label for="callDeposit">Attached deposit (NEAR)</label>
+  <input type="text" id="callDeposit" value="0">
+  <label for="callGas">Gas (yocto-gas units, as integer)</label>
+  <input type="text" id="callGas" value="30000000000000">
+  <br>
+  <button id="callBtn" type="button" disabled>Send change call</button>
+  <div class="result" id="callResult"></div>
+</section>
+
+<section id="viewSection">
+  <h2>4. View call (no signing)</h2>
+  <label for="viewContract">Contract account id</label>
+  <input type="text" id="viewContract" value="arkvault2120.testnet">
+  <label for="viewMethod">Method name</label>
+  <input type="text" id="viewMethod" placeholder="get_vault_state">
+  <label for="viewArgs">Arguments (JSON object)</label>
+  <textarea id="viewArgs" placeholder="{}">{}</textarea>
+  <br>
+  <button id="viewBtn" type="button">Run view call</button>
+  <div class="result" id="viewResult"></div>
+</section>
+
+<section id="logSection">
+  <h2>Log</h2>
+  <pre id="log"></pre>
+</section>
+
+<script type="module">
+import { setupWalletSelector } from '@near-wallet-selector/core';
+import { setupMeteorWallet } from '@near-wallet-selector/meteor-wallet';
+
+// ---------------------------------------------------------------------------
+// Pinned configuration — TESTNET only.
+// The RPC endpoint is pinned here and handed to the wallet selector as a
+// fallback RPC URL, which the selector's testnet preset adopts as its node
+// URL. The explorer base is used only to build transaction links.
+// ---------------------------------------------------------------------------
+const NETWORK_ID = 'testnet';
+const RPC_URL = 'https://rpc.testnet.fastnear.com';
+const EXPLORER_TX_BASE = 'https://testnet.nearblocks.io/txns/';
+
+const $ = (id) => document.getElementById(id);
+const logEl = $('log');
+
+function log(message) {
+  logEl.textContent += `[${new Date().toISOString()}] ${message}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function errorMessage(err) {
+  if (err && typeof err.message === 'string' && err.message) return err.message;
+  return String(err);
+}
+
+function logError(context, err) {
+  log(`ERROR (${context}): ${errorMessage(err)}`);
+}
+
+let selector = null;
+let wallet = null;
+let accountId = null;
+
+// ---------------------------------------------------------------------------
+// Network guard. The selector is configured for testnet at setup; before any
+// signing request this re-reads the selector's configured network id and
+// refuses if it is anything else (for example a wallet session left in
+// mainnet mode). This console is testnet-only and will never sign on
+// mainnet.
+// ---------------------------------------------------------------------------
+function assertTestnet(context) {
+  const reported = selector && selector.options && selector.options.network
+    ? selector.options.network.networkId
+    : undefined;
+  if (reported !== NETWORK_ID) {
+    const message = `Refusing to sign (${context}): this console is pinned to "testnet" but the wallet selector reports network "${reported}". Signing refused — no transaction was sent.`;
+    log(`ERROR: ${message}`);
+    throw new Error(message);
+  }
+  return reported;
+}
+
+function renderAccount() {
+  $('accountDisplay').textContent = accountId
+    ? `Connected account: ${accountId}`
+    : 'Not connected.';
+  const connected = Boolean(accountId && wallet);
+  $('signOutBtn').disabled = !connected;
+  $('deployBtn').disabled = !connected;
+  $('callBtn').disabled = !connected;
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function parseArgsJson(text, context) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return {};
+  const parsed = JSON.parse(trimmed);
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${context}: arguments must be a JSON object.`);
+  }
+  return parsed;
+}
+
+// Convert a NEAR amount string to a yoctoNEAR string. Prefers near-api-js'
+// own parser; falls back to exact decimal string math (1 NEAR = 10^24 yocto).
+function nearToYocto(amountNear) {
+  const nearApi = window.nearApi;
+  if (nearApi && nearApi.utils && nearApi.utils.format
+      && typeof nearApi.utils.format.parseNearAmount === 'function') {
+    return nearApi.utils.format.parseNearAmount(String(amountNear).trim());
+  }
+  const s = String(amountNear).trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) {
+    throw new Error(`Invalid NEAR amount: "${amountNear}"`);
+  }
+  const parts = s.split('.');
+  const whole = parts[0];
+  const fraction = (parts[1] || '').padEnd(24, '0').slice(0, 24);
+  return (whole + fraction).replace(/^0+(?=\d)/, '');
+}
+
+// Action builders. Primary form: the actionCreators from near-api-js (the
+// selector accepts those Action instances). Fallback: the plain-object form
+// the wallet selector also accepts ({ type, params }) — used if the UMD
+// bundle failed to load.
+function buildDeployContractAction(codeBytes) {
+  const nearApi = window.nearApi;
+  const creators = nearApi && nearApi.transactions && nearApi.transactions.actionCreators;
+  if (creators && typeof creators.deployContract === 'function') {
+    try {
+      return creators.deployContract(codeBytes);
+    } catch (err) {
+      log(`actionCreators.deployContract failed (${errorMessage(err)}); falling back to the plain-object action form.`);
+    }
+  }
+  return { type: 'DeployContract', params: { code: codeBytes } };
+}
+
+function buildFunctionCallAction(methodName, argsObject, gas, depositYocto) {
+  const nearApi = window.nearApi;
+  const creators = nearApi && nearApi.transactions && nearApi.transactions.actionCreators;
+  if (creators && typeof creators.functionCall === 'function') {
+    try {
+      return creators.functionCall(methodName, argsObject, gas, depositYocto);
+    } catch (err) {
+      log(`actionCreators.functionCall failed (${errorMessage(err)}); falling back to the plain-object action form.`);
+    }
+  }
+  return {
+    type: 'FunctionCall',
+    params: { methodName, args: argsObject, gas: String(gas), deposit: String(depositYocto) },
+  };
+}
+
+function showTxOutcome(resultEl, context, outcome) {
+  const hash = outcome && outcome.transaction ? outcome.transaction.hash : undefined;
+  if (hash) {
+    const url = EXPLORER_TX_BASE + hash;
+    resultEl.innerHTML = '';
+    const text = document.createTextNode(`${context} succeeded. Transaction hash: ${hash}\nExplorer: `);
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = url;
+    resultEl.appendChild(text);
+    resultEl.appendChild(link);
+    log(`${context} succeeded. Transaction hash: ${hash}`);
+    log(`Explorer: ${url}`);
+  } else {
+    resultEl.textContent = `${context}: the wallet returned no transaction outcome. Raw result: ${JSON.stringify(outcome)}`;
+    log(`${context}: no transaction hash in the wallet result: ${JSON.stringify(outcome)}`);
+  }
+}
+
+async function initSelector() {
+  if (selector) return selector;
+  selector = await setupWalletSelector({
+    network: NETWORK_ID,
+    fallbackRpcUrls: [RPC_URL],
+    modules: [setupMeteorWallet()],
+  });
+  log(`Wallet selector initialised. Configured network id: "${selector.options.network.networkId}"; node URL: ${selector.options.network.nodeUrl}; explorer URL: ${selector.options.network.explorerUrl}`);
+  // Restore an existing wallet session, if one is already signed in.
+  try {
+    const existing = await selector.wallet();
+    const accounts = await existing.getAccounts();
+    if (accounts && accounts.length > 0) {
+      wallet = existing;
+      accountId = accounts[0].accountId;
+      log(`Restored existing wallet session for account: ${accountId}`);
+    }
+  } catch (err) {
+    // No wallet selected yet — expected before the first Connect click.
+    log(`No existing wallet session to restore (${errorMessage(err)}).`);
+  }
+  renderAccount();
+  // Keep the account display in sync with wallet-side account changes.
+  try {
+    selector.store.observable.subscribe((state) => {
+      const accounts = (state && state.accounts) || [];
+      const active = accounts.find((a) => a.active) || accounts[0];
+      const current = active ? active.accountId : null;
+      if (current !== accountId) {
+        accountId = current;
+        if (!current) wallet = null;
+        log(current ? `Wallet account changed: ${current}` : 'Wallet disconnected.');
+        renderAccount();
+      }
+    });
+  } catch (err) {
+    log(`Could not subscribe to wallet account changes (${errorMessage(err)}); the display updates on Connect instead.`);
+  }
+  return selector;
+}
+
+async function onConnect() {
+  try {
+    await initSelector();
+    try {
+      wallet = await selector.wallet('meteor-wallet');
+    } catch (err) {
+      log(`selector.wallet("meteor-wallet") failed (${errorMessage(err)}); trying the selected wallet instead.`);
+      wallet = await selector.wallet();
+    }
+    log('Requesting wallet sign-in — approve the connection in the Meteor Wallet window.');
+    const accounts = await wallet.signIn({});
+    log(`Wallet sign-in returned: ${JSON.stringify(accounts)}`);
+    const list = (accounts && accounts.length > 0) ? accounts : await wallet.getAccounts();
+    if (!list || list.length === 0) {
+      throw new Error('Sign-in completed but the wallet returned no accounts.');
+    }
+    accountId = list[0].accountId;
+    log(`Connected account: ${accountId}`);
+    if (!/\.testnet$/.test(accountId)) {
+      log(`WARNING: the connected account id "${accountId}" does not end in .testnet. Check that Meteor Wallet is in testnet mode before signing anything.`);
+    }
+    // Report the selector's network after connect; signing itself is guarded
+    // by assertTestnet before every transaction.
+    log(`Selector network after connect: "${selector.options.network.networkId}" (pinned target: "${NETWORK_ID}").`);
+    renderAccount();
+  } catch (err) {
+    logError('connect wallet', err);
+  }
+}
+
+async function onSignOut() {
+  try {
+    if (wallet) await wallet.signOut();
+    wallet = null;
+    accountId = null;
+    log('Wallet signed out.');
+    renderAccount();
+  } catch (err) {
+    logError('disconnect wallet', err);
+  }
+}
+
+async function onDeploy() {
+  const resultEl = $('deployResult');
+  try {
+    if (!wallet || !accountId) throw new Error('Connect a wallet first.');
+    const fileInput = $('wasmFile');
+    if (!fileInput.files || fileInput.files.length === 0) {
+      throw new Error('Choose a .wasm file first.');
+    }
+    const file = fileInput.files[0];
+    const buffer = await file.arrayBuffer();
+    const code = new Uint8Array(buffer);
+    log(`Deploy: read "${file.name}" — ${code.length} bytes. Deploying to the connected account ${accountId} (contract deploys to its own account).`);
+    assertTestnet('deploy');
+    resultEl.textContent = 'Waiting for the wallet to sign and send the deploy transaction…';
+    const outcome = await wallet.signAndSendTransaction({
+      signerId: accountId,
+      receiverId: accountId,
+      actions: [buildDeployContractAction(code)],
+    });
+    showTxOutcome(resultEl, 'Deploy', outcome);
+  } catch (err) {
+    resultEl.textContent = `Deploy failed: ${errorMessage(err)}`;
+    logError('deploy', err);
+  }
+}
+
+async function onChangeCall() {
+  const resultEl = $('callResult');
+  try {
+    if (!wallet || !accountId) throw new Error('Connect a wallet first.');
+    const contractId = $('callContract').value.trim();
+    const methodName = $('callMethod').value.trim();
+    if (!contractId) throw new Error('Enter the contract account id.');
+    if (!methodName) throw new Error('Enter the method name.');
+    const args = parseArgsJson($('callArgs').value, 'change call');
+    const depositYocto = nearToYocto($('callDeposit').value || '0');
+    const gas = $('callGas').value.trim();
+    if (!/^\d+$/.test(gas)) throw new Error(`Gas must be an integer string, got: "${gas}"`);
+    log(`Change call: ${contractId}.${methodName} with args ${JSON.stringify(args)}, deposit ${depositYocto} yoctoNEAR, gas ${gas}. Signer: ${accountId}.`);
+    assertTestnet('change call');
+    resultEl.textContent = 'Waiting for the wallet to sign and send the transaction…';
+    const outcome = await wallet.signAndSendTransaction({
+      signerId: accountId,
+      receiverId: contractId,
+      actions: [buildFunctionCallAction(methodName, args, gas, depositYocto)],
+    });
+    showTxOutcome(resultEl, 'Change call', outcome);
+  } catch (err) {
+    resultEl.textContent = `Change call failed: ${errorMessage(err)}`;
+    logError('change call', err);
+  }
+}
+
+async function onViewCall() {
+  const resultEl = $('viewResult');
+  try {
+    const contractId = $('viewContract').value.trim();
+    const methodName = $('viewMethod').value.trim();
+    if (!contractId) throw new Error('Enter the contract account id.');
+    if (!methodName) throw new Error('Enter the method name.');
+    const args = parseArgsJson($('viewArgs').value, 'view call');
+    const nearApi = window.nearApi;
+    if (!nearApi || !nearApi.providers || typeof nearApi.providers.JsonRpcProvider !== 'function') {
+      throw new Error('near-api-js failed to load, so the RPC provider is unavailable. Check the CDN script and reload the page.');
+    }
+    const provider = new nearApi.providers.JsonRpcProvider({ url: RPC_URL });
+    const argsBase64 = bytesToBase64(new TextEncoder().encode(JSON.stringify(args)));
+    log(`View call: ${contractId}.${methodName} with args ${JSON.stringify(args)} via ${RPC_URL}.`);
+    const response = await provider.query({
+      request_type: 'call_function',
+      finality: 'final',
+      account_id: contractId,
+      method_name: methodName,
+      args_base64: argsBase64,
+    });
+    if (response.error) {
+      resultEl.textContent = `View call returned an error: ${JSON.stringify(response.error)}`;
+      log(`View call error: ${JSON.stringify(response.error)}`);
+      return;
+    }
+    const rawText = new TextDecoder().decode(new Uint8Array(response.result || []));
+    let pretty;
+    try {
+      pretty = JSON.stringify(JSON.parse(rawText), null, 2);
+    } catch (parseErr) {
+      pretty = rawText;
+    }
+    resultEl.textContent = pretty;
+    log(`View call result: ${pretty}`);
+    if (response.logs && response.logs.length > 0) {
+      log(`View call logs: ${JSON.stringify(response.logs)}`);
+    }
+  } catch (err) {
+    resultEl.textContent = `View call failed: ${errorMessage(err)}`;
+    logError('view call', err);
+  }
+}
+
+$('connectBtn').addEventListener('click', onConnect);
+$('signOutBtn').addEventListener('click', onSignOut);
+$('deployBtn').addEventListener('click', onDeploy);
+$('callBtn').addEventListener('click', onChangeCall);
+$('viewBtn').addEventListener('click', onViewCall);
+
+log('Ark testnet console loaded. Network pinned to "testnet".');
+if (!window.nearApi) {
+  log('WARNING: near-api-js (UMD) did not load — view calls are unavailable and deposit conversion will use the built-in fallback. Wallet signing via the selector is unaffected.');
+} else {
+  log(`near-api-js loaded (window.nearApi present). RPC endpoint for view calls: ${RPC_URL}`);
+}
+initSelector().catch((err) => logError('wallet selector setup', err));
+</script>
+
+</body>
+</html>
