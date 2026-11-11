@@ -1,0 +1,31 @@
+# Keys, credentials, secrets — NEVER committed
+*.pem
+*.key
+*.json.key
+.env
+.env.*
+credentials/
+secrets/
+**/*-keypair*.json
+**/*secret*.json
+near-credentials/
+*.seed
+
+# Build outputs
+target/
+contract/target/
+contract/*.wasm
+build/
+dist/
+node_modules/
+package-lock.json
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local demo state
+sim/state/
+*.log

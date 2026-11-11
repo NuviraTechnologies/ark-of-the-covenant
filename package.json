@@ -1,0 +1,17 @@
+{
+  "dependencies": {
+    "near-api-js": "^7.4.0"
+  },
+  "description": "Ark of the Covenant \u2014 a NEAR testnet vault an AI agent can spend from but cannot drain. NEAR Hackathon, AI Security & Defense track.",
+  "license": "MIT",
+  "name": "ark-of-the-covenant",
+  "private": true,
+  "scripts": {
+    "attack": "node sim/attack-simulator.js",
+    "counterparty": "node services/counterparty-service.js",
+    "demo": "node sim/demo.js",
+    "test": "node --test tests/core.test.js tests/counterparty-service.test.js tests/agent-sim.test.js tests/near-chain-client.test.js"
+  },
+  "type": "commonjs",
+  "version": "0.1.0"
+}
