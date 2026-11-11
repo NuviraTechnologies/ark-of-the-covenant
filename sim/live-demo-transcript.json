@@ -1,0 +1,96 @@
+{
+  "network": "testnet",
+  "rpcUrl": "https://rpc.testnet.fastnear.com",
+  "vault": "ark3vault2120.testnet",
+  "steps": [
+    {
+      "step": "state-before",
+      "vaultBalanceYocto": "34995885024045077500000000",
+      "dailySpentYocto": "5000000000000000000000000",
+      "dailyCapYocto": "25000000000000000000000000",
+      "maxPerTxYocto": "10000000000000000000000000",
+      "pendingCount": 0,
+      "auditCount": 6
+    },
+    {
+      "step": "payment-1 (expect warn -> approve -> released)",
+      "outcome": "released",
+      "release": {
+        "released": true,
+        "releaseId": "rel-2",
+        "recipient": "ark3agent2120.testnet",
+        "amountYocto": "5000000000000000000000000",
+        "purposeHash": "c509e56e53dc193501ca97b3ca28b29abc5929e8a44dab5705b141001698a4fe",
+        "txHash": "HjzAhtXtEPfYJtLTiyJZQqDWCjVm85VcpSksChJ89MNY"
+      },
+      "purposeHash": "c509e56e53dc193501ca97b3ca28b29abc5929e8a44dab5705b141001698a4fe"
+    },
+    {
+      "step": "state-after-payment-1",
+      "vaultBalanceYocto": "29995370654015681800000000",
+      "dailySpentYocto": "10000000000000000000000000",
+      "dailyCapYocto": "25000000000000000000000000",
+      "maxPerTxYocto": "10000000000000000000000000",
+      "pendingCount": 0,
+      "auditCount": 8
+    },
+    {
+      "step": "payment-2 (expect allow -> released)",
+      "outcome": "released",
+      "release": {
+        "released": true,
+        "releaseId": "rel-3",
+        "recipient": "ark3agent2120.testnet",
+        "amountYocto": "5000000000000000000000000",
+        "purposeHash": "51e6ea94811aea0477a7dc8869e1b0abffa8bd57acded2c872efcb6e812dfc8e",
+        "txHash": "5M1xmiPnwgochXiYzu2QXBG7bWSLZtnN75m8h5jHoeW"
+      },
+      "purposeHash": "51e6ea94811aea0477a7dc8869e1b0abffa8bd57acded2c872efcb6e812dfc8e"
+    },
+    {
+      "step": "state-after-payment-2",
+      "vaultBalanceYocto": "24994842733963179100000000",
+      "dailySpentYocto": "15000000000000000000000000",
+      "dailyCapYocto": "25000000000000000000000000",
+      "maxPerTxYocto": "10000000000000000000000000",
+      "pendingCount": 0,
+      "auditCount": 10
+    },
+    {
+      "step": "injection-attempt (expect blocked, blocklist reason)",
+      "outcome": "blocked",
+      "reason": "on shared blocklist: reported drain attempt, 2026-11-10",
+      "purposeHash": "43f6858e65c9bc6b40afc6de9fe1bddddaf54b95220ae2d0965a90d44abfaca7"
+    },
+    {
+      "step": "state-after-injection",
+      "vaultBalanceYocto": "24994607349172535400000000",
+      "dailySpentYocto": "15000000000000000000000000",
+      "dailyCapYocto": "25000000000000000000000000",
+      "maxPerTxYocto": "10000000000000000000000000",
+      "pendingCount": 0,
+      "auditCount": 11
+    },
+    {
+      "step": "use-secret (expect 64-char hex digest only)",
+      "secretId": "api-key-1",
+      "operation": "call billing api",
+      "derived": "95a5d438df320174084dfab729fc68c45260c6ebd215b2d90315c7873161d714",
+      "txHash": "Fj9v4yZLCdnDgZXKYjUYcranYcn98xNTJXGviLZpNfV1"
+    },
+    {
+      "step": "audit-log",
+      "count": 0,
+      "entries": []
+    },
+    {
+      "step": "state-final",
+      "vaultBalanceYocto": "24994371298354577200000000",
+      "dailySpentYocto": "15000000000000000000000000",
+      "dailyCapYocto": "25000000000000000000000000",
+      "maxPerTxYocto": "10000000000000000000000000",
+      "pendingCount": 0,
+      "auditCount": 12
+    }
+  ]
+}

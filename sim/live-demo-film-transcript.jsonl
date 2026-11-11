@@ -1,0 +1,37 @@
+{"t":47,"line":"ARK OF THE COVENANT - live on NEAR testnet"}
+{"t":47,"line":"vault: ark3vault2120.testnet"}
+{"t":47,"line":"the agent holds only a scoped key: it can ask, it cannot just take"}
+{"t":2457,"line":""}
+{"t":2457,"line":"[1] VAULT STATE BEFORE"}
+{"t":2457,"line":"    balance 24.994 NEAR | spent today 15.000 of 25.000 NEAR daily cap | audit entries: 12"}
+{"t":4258,"line":""}
+{"t":4258,"line":"[2] PAYMENT - a vendor the vault has paid before"}
+{"t":4441,"line":"    agent asks: pay 5 NEAR to ark3agent2120.testnet"}
+{"t":4441,"line":"    purpose: \"API subscription renewal\""}
+{"t":8149,"line":"    contract decision: ALLOW - ok"}
+{"t":9536,"line":"    gate signs this exact payment: recipient + amount + purpose + nonce"}
+{"t":13160,"line":"    RELEASED. tx 4pzWjfnd5doUJsWBTzH2eygNhQ1snxGH5qMxzyiNCcM1"}
+{"t":13377,"line":"    vendor balance: 20.000 -> 25.000 NEAR"}
+{"t":15379,"line":""}
+{"t":15380,"line":"[3] THE ATTACK - a poisoned instruction tries to pay a blocked account"}
+{"t":15380,"line":"    the agent is told: pay 1 NEAR to ark3gate2120.testnet"}
+{"t":18506,"line":"    contract decision: BLOCK - on shared blocklist: reported drain attempt, 2026-11-10"}
+{"t":18691,"line":"    no release was created. attacker balance: 0.000 NEAR"}
+{"t":18691,"line":"    the refusal itself is written into the vault audit log"}
+{"t":20691,"line":""}
+{"t":20691,"line":"[4] SEALED SECRET - used, never read"}
+{"t":23969,"line":"    use_secret(\"api-key-1\", \"call billing api\") via the scoped key"}
+{"t":23969,"line":"    returned: 95a5d438df320174084dfab729fc68c45260c6ebd215b2d90315c7873161d714"}
+{"t":23969,"line":"    a 64-character fingerprint only - no plaintext, no ciphertext"}
+{"t":23969,"line":"    tx 3zYMZJvaaqPD2J6V8LS4Btrcm9Cso2TwJ37vDx35SA2i"}
+{"t":26136,"line":""}
+{"t":26137,"line":"[5] AUDIT LOG - last entries, written by the contract itself"}
+{"t":26137,"line":"    #13 request_release: allow: ok"}
+{"t":26137,"line":"    #14 release: released"}
+{"t":26137,"line":"    #15 request_release: block: on shared blocklist: reported drain attempt, 2026-11-10"}
+{"t":26137,"line":"    #16 use_secret: derived result returned; secret not exposed"}
+{"t":28124,"line":""}
+{"t":28124,"line":"[6] VAULT STATE AFTER"}
+{"t":28124,"line":"    balance 19.993 NEAR | spent today 20.000 of 25.000 NEAR daily cap | audit entries: 16"}
+{"t":28124,"line":""}
+{"t":28124,"line":"the vault held. the agent asked; the contract decided."}
